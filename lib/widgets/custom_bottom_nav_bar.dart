@@ -1,115 +1,96 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import '../theme/app_theme.dart';
+import 'dart:math';
 
 class CustomBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
 
   const CustomBottomNavBar({
-    super.key,
+    Key? key,
     required this.currentIndex,
     required this.onTap,
-  });
+  }) : super(key: key);
 
-  Widget _buildNavItem(BuildContext context, {
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-    required int index,
-  }) {
-    final bool isActive = currentIndex == index;
-    final Color activeColor = Theme.of(context).bottomNavigationBarTheme.selectedItemColor ?? Theme.of(context).colorScheme.primary;
-    final Color inactiveColor = Theme.of(context).bottomNavigationBarTheme.unselectedItemColor ?? Theme.of(context).colorScheme.onSurfaceVariant;
-    final Color itemColor = isActive ? activeColor : inactiveColor;
-
-    final TextStyle? activeLabelStyle = Theme.of(context).bottomNavigationBarTheme.selectedLabelStyle;
-    final TextStyle? inactiveLabelStyle = Theme.of(context).bottomNavigationBarTheme.unselectedLabelStyle;
-
-    return Expanded(
-      child: InkWell(
-        onTap: () => onTap(index),
-        borderRadius: BorderRadius.circular(8.0),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(isActive ? activeIcon : icon, color: itemColor, size: 24),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: (isActive ? activeLabelStyle : inactiveLabelStyle)?.copyWith(
-                  color: itemColor,
-                  fontSize: 11,
-                ) ?? TextStyle(
-                  color: itemColor,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 11,
-                ),
-              ),
-            ],
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, -2),
+            spreadRadius: 1,
           ),
+        ],
+      ),
+      child: Container(
+        height: 65 + bottomPadding,
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(
+              icon: Icons.home_outlined,
+              selectedIcon: Icons.home_rounded,
+              isSelected: currentIndex == 0,
+              onTap: () => onTap(0),
+            ),
+            _buildNavItem(
+              icon: Icons.favorite_border_rounded,
+              selectedIcon: Icons.favorite_rounded,
+              isSelected: currentIndex == 1,
+              onTap: () => onTap(1),
+            ),
+            _buildNavItem(
+              icon: Icons.shopping_cart_outlined,
+              selectedIcon: Icons.shopping_cart_rounded,
+              isSelected: currentIndex == 2,
+              onTap: () => onTap(2),
+            ),
+            _buildNavItem(
+              icon: Icons.person_outline_rounded,
+              selectedIcon: Icons.person_rounded,
+              isSelected: currentIndex == 3,
+              onTap: () => onTap(3),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return BottomAppBar(
-      color: Colors.transparent,
-      elevation: 0,
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-          child: Container(
-            height: kBottomNavigationBarHeight + MediaQuery.of(context).padding.bottom,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.darkThemePrimaryBase.withOpacity(0.85),
-                  AppTheme.darkThemeGradientAccent.withOpacity(0.7),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  context,
-                  icon: Icons.home_outlined,
-                  activeIcon: Icons.home,
-                  label: 'الرئيسية',
-                  index: 0,
-                ),
-                _buildNavItem(
-                  context,
-                  icon: Icons.shopping_cart_outlined,
-                  activeIcon: Icons.shopping_cart,
-                  label: 'السلة',
-                  index: 1,
-                ),
-                _buildNavItem(
-                  context,
-                  icon: Icons.list_alt_outlined,
-                  activeIcon: Icons.list_alt,
-                  label: 'الطلبات',
-                  index: 2,
-                ),
-                _buildNavItem(
-                  context,
-                  icon: Icons.person_outline,
-                  activeIcon: Icons.person,
-                  label: 'الحساب',
-                  index: 3,
-                ),
-              ],
-            ),
-          ),
+  Widget _buildNavItem({
+    required IconData icon,
+    required IconData selectedIcon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 50,
+        height: 50,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? NeumorphicConstants.gradientStart.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(15),
+          border: isSelected ? Border.all(
+            color: NeumorphicConstants.gradientStart.withOpacity(0.2),
+            width: 1,
+          ) : null,
+        ),
+        child: Icon(
+          isSelected ? selectedIcon : icon,
+          color: isSelected ? NeumorphicConstants.gradientStart : const Color(0xFF2D2D2D),
+          size: 26,
         ),
       ),
     );

@@ -1,94 +1,195 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import '../../../theme/app_theme.dart';
 
 class InternationalSitesGrid extends StatelessWidget {
-  final List<Map<String, dynamic>> internationalSites = const [
-    {'name': 'Shein', 'icon': Icons.shopping_bag, 'color': Color(0xFFFCE4EC)},
-    {'name': 'Alibaba', 'icon': Icons.store, 'color': Color(0xFFFFE0B2)},
-    {'name': 'AliExpress', 'icon': Icons.local_shipping, 'color': Color(0xFFFFCDD2)},
-    {'name': 'Amazon', 'icon': Icons.add_shopping_cart, 'color': Color(0xFFFFF9C4)},
-    {'name': 'eBay', 'icon': Icons.shop_two, 'color': Color(0xFFD1C4E9)},
-  ];
-
-  const InternationalSitesGrid({super.key});
+  const InternationalSitesGrid({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final List<Map<String, dynamic>> sites = [
+      {
+        'name': 'SHEIN',
+        'icon': Icons.shopping_bag_outlined,
+        'description': 'أزياء عصرية بأسعار مناسبة',
+        'route': '/shein',
+        'backgroundColor': const Color(0xFF000000),
+        'textColor': const Color(0xFFFFFFFF),
+        'hoverBackgroundColor': const Color(0xFF333333),
+        'hoverTextColor': const Color(0xFFFFFFFF),
+      },
+      {
+        'name': 'AliExpress',
+        'icon': Icons.shopping_cart_outlined,
+        'description': 'كل ما تحتاجه في مكان واحد',
+        'route': '/aliexpress',
+        'backgroundColor': const Color(0xFFD31836),
+        'textColor': const Color(0xFFFFFFFF),
+        'hoverBackgroundColor': const Color(0xFFB31229),
+        'hoverTextColor': const Color(0xFFFFFFFF),
+      },
+      {
+        'name': 'Alibaba',
+        'icon': Icons.business_outlined,
+        'description': 'تجارة عالمية وفرص استثمارية',
+        'route': '/alibaba',
+        'backgroundColor': const Color(0xFFFF6A00),
+        'textColor': const Color(0xFFFFFFFF),
+        'hoverBackgroundColor': const Color(0xFFE65C00),
+        'hoverTextColor': const Color(0xFFFFFFFF),
+      },
+      {
+        'name': 'Amazon',
+        'icon': Icons.local_mall_outlined,
+        'description': 'تسوق عالمي موثوق',
+        'route': '/amazon',
+        'backgroundColor': const Color(0xFF232F3E),
+        'textColor': const Color(0xFFFFFFFF),
+        'hoverBackgroundColor': const Color(0xFF131921),
+        'hoverTextColor': const Color(0xFFFF9900),
+      },
+      {
+        'name': 'eBay',
+        'icon': Icons.store_outlined,
+        'description': 'مزادات ومنتجات فريدة',
+        'route': '/ebay',
+        'backgroundColor': const Color(0xFF0063D1),
+        'textColor': const Color(0xFFFFFFFF),
+        'hoverBackgroundColor': const Color(0xFF004C9E),
+        'hoverTextColor': const Color(0xFFFFFFFF),
+      },
+      {
+        'name': 'Noon',
+        'icon': Icons.shopping_basket_outlined,
+        'description': 'تسوق محلي سريع وموثوق',
+        'route': '/noon',
+        'backgroundColor': const Color(0xFF404553),
+        'textColor': const Color(0xFFFFFFFF),
+        'hoverBackgroundColor': const Color(0xFF2D3139),
+        'hoverTextColor': const Color(0xFFFFB800),
+      },
+    ];
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      itemCount: internationalSites.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16.0,
-        mainAxisSpacing: 16.0,
-        childAspectRatio: 1.2,
+        crossAxisCount: 1,
+        childAspectRatio: 3.2,
+        mainAxisSpacing: 16,
       ),
+      itemCount: sites.length,
       itemBuilder: (context, index) {
-        final site = internationalSites[index];
-        final cardBorderRadius = BorderRadius.circular(12.0);
-
-        return Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: cardBorderRadius),
-          clipBehavior: Clip.antiAlias,
-          color: Colors.transparent,
-          elevation: 0,
-          child: ClipRRect(
-            borderRadius: cardBorderRadius,
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 4.0, sigmaY: 4.0),
-              child: Container(
+        final site = sites[index];
+        return StatefulBuilder(
+          builder: (context, setState) {
+            bool isHovered = false;
+            return MouseRegion(
+              onEnter: (_) => setState(() => isHovered = true),
+              onExit: (_) => setState(() => isHovered = false),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.darkThemeSlidesBackground.withOpacity(0.75),
-                      AppTheme.darkThemeSlidesBackground.withOpacity(0.55),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  borderRadius: BorderRadius.circular(15),
+                  color: isHovered 
+                    ? site['hoverBackgroundColor'] as Color 
+                    : site['backgroundColor'] as Color,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isHovered 
+                        ? site['hoverBackgroundColor'] as Color 
+                        : site['backgroundColor'] as Color).withOpacity(0.3),
+                      blurRadius: isHovered ? 12 : 8,
+                      offset: isHovered 
+                        ? const Offset(0, 6) 
+                        : const Offset(0, 4),
+                      spreadRadius: isHovered ? 1 : 0,
+                    ),
+                  ],
                 ),
-                child: InkWell(
-                  onTap: () {
-                    if (site['name'] == 'Shein') {
-                      Navigator.pushNamed(context, '/shein');
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('سيتم فتح ${site['name']} لاحقًا')),
-                      );
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => Navigator.pushNamed(context, site['route'] as String),
+                    borderRadius: BorderRadius.circular(15),
+                    child: Stack(
                       children: [
-                        Icon(
-                          site['icon'],
-                          size: 40,
-                          color: Colors.white.withOpacity(0.9),
+                        Positioned(
+                          right: -20,
+                          bottom: -20,
+                          child: Icon(
+                            site['icon'] as IconData,
+                            size: 120,
+                            color: (isHovered 
+                              ? site['hoverTextColor'] as Color 
+                              : site['textColor'] as Color).withOpacity(0.1),
+                          ),
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          site['name'],
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.9),
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  site['icon'] as IconData,
+                                  size: 28,
+                                  color: isHovered 
+                                    ? site['hoverTextColor'] as Color 
+                                    : site['textColor'] as Color,
+                                ),
                               ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      site['name'] as String,
+                                      style: TextStyle(
+                                        color: isHovered 
+                                          ? site['hoverTextColor'] as Color 
+                                          : site['textColor'] as Color,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      site['description'] as String,
+                                      style: TextStyle(
+                                        color: (isHovered 
+                                          ? site['hoverTextColor'] as Color 
+                                          : site['textColor'] as Color).withOpacity(0.8),
+                                        fontSize: 16,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: (isHovered 
+                                  ? site['hoverTextColor'] as Color 
+                                  : site['textColor'] as Color).withOpacity(0.5),
+                                size: 20,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
