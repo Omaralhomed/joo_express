@@ -43,7 +43,10 @@ jobs:
           tag_name: latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        files: build/app/outputs/flutter-apk/app-release.apk
+      - name: Upload APK asset
+        run: gh release upload latest build/app/outputs/flutter-apk/app-release.apk --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
