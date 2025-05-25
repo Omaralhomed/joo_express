@@ -1,16 +1,16 @@
-name: Deploy Flutter Web to GitHub Pages
+name: Build and Deploy APK and Web
 
 on:
   push:
-    branches: [main]  
-  workflow_dispatch:   
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Setup Flutter
@@ -22,11 +22,28 @@ jobs:
       - name: Enable Web
         run: flutter config --enable-web
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Flutter Web
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build Web
         run: flutter build web --release --base-href=/joo_express/
+
+      - name: Create download.html
+        run: |
+          echo '<!DOCTYPE html>' > build/web/download.html
+          echo '<html><head><meta http-equiv="refresh" content="0; url=https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk" /></head>' >> build/web/download.html
+          echo '<body><p>جارٍ تحميل التطبيق... <a href="https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk">اضغط هنا إذا لم يبدأ التحميل</a></p></body></html>' >> build/web/download.html
+
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        files: build/app/outputs/flutter-apk/app-release.apk
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
