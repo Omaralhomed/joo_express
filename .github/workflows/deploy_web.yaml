@@ -2,8 +2,8 @@ name: Deploy Flutter Web to GitHub Pages
 
 on:
   push:
-    branches: [main]  # يتم النشر عند كل push على main
-  workflow_dispatch:   # يضيف زر يدوي لتشغيله من GitHub
+    branches: [main]  
+  workflow_dispatch:   
 
 jobs:
   build:
