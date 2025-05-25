@@ -7,7 +7,6 @@ void main() {
   testWidgets('MyApp smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // فقط تحقق أن MyApp موجودة
     expect(find.byType(MyApp), findsOneWidget);
   });
 }
