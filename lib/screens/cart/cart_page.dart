@@ -5,12 +5,19 @@ import 'package:joo_express/models/product.dart';
 
 // صفحة عرض السلة
 class CartPage extends StatefulWidget {
+  const CartPage({Key? key}) : super(key: key);
+
   @override
   _CartPageState createState() => _CartPageState();
 }
 
 class _CartPageState extends State<CartPage> {
-  List<Product> cartItems = [];
+  List<Product> _cartItems = [];
+  double _total = 0.0;
+  bool _isLoading = true;
+  bool _isCheckoutInProgress = false;
+  String? _selectedShippingLocation;
+  String? _selectedPaymentMethod;
 
   @override
   void initState() {
@@ -20,52 +27,53 @@ class _CartPageState extends State<CartPage> {
 
   // تحميل المنتجات من SharedPreferences عند فتح صفحة السلة
   Future<void> _loadCart() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      List<String>? cartList = prefs.getStringList('cart');
-      print("_loadCart: cartList from SharedPreferences: $cartList"); // طباعة القائمة الخام
-
-      if (cartList != null) {
-        List<Product> loadedItems = [];
-        for (var itemJson in cartList) {
-          try {
-            Map<String, dynamic> itemMap = jsonDecode(itemJson);
-            print("_loadCart: Decoded itemMap: $itemMap"); // طباعة الخريطة بعد فك الترميز
-            loadedItems.add(Product.fromMap(itemMap));
-          } catch (e) {
-            print("خطأ في فك ترميز منتج من السلة: $itemJson, الخطأ: $e");
-            // يمكنك اختيار إضافة منتج خطأ أو تجاهله
-            // loadedItems.add(Product(name: "خطأ بالمنتج", price: "", image: "", size: "", color: ""));
-          }
+      List<String> cartList = prefs.getStringList('cart') ?? [];
+      
+      _cartItems = cartList.map((jsonStr) {
+        try {
+          return Product.fromMap(jsonDecode(jsonStr));
+        } catch (e) {
+          print("Error decoding product: $jsonStr, Error: $e");
+          return null;
         }
-        setState(() {
-          cartItems = loadedItems;
-          print("_loadCart: cartItems after processing: ${cartItems.map((p) => p.toMap()).toList()}"); // طباعة المنتجات المحملة
-        });
-      } else {
-        print("_loadCart: cartList is null or empty. Setting cartItems to empty list.");
-        setState(() {
-          cartItems = []; // تأكد من إفراغ القائمة إذا كانت فارغة في SharedPreferences
-        });
-      }
+      }).where((p) => p != null).cast<Product>().toList();
+
+      _calculateTotal();
     } catch (e) {
-      print("خطأ أثناء تحميل السلة: $e");
+      print("Error loading cart: $e");
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
+  }
+
+  void _calculateTotal() {
+    _total = _cartItems.fold(0.0, (sum, item) {
+      double price = double.tryParse(item.price) ?? 0.0;
+      return sum + (price * item.quantity);
+    });
   }
 
   // إزالة منتج من السلة وتحديث التخزين
   Future<void> _removeFromCart(int index) async {
-    if (index < 0 || index >= cartItems.length) {
+    if (index < 0 || index >= _cartItems.length) {
       print("_removeFromCart: Invalid index $index");
       return;
     }
-    final removedItemName = cartItems[index].name;
+    final removedItemName = _cartItems[index].name;
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
-        cartItems.removeAt(index);
+        _cartItems.removeAt(index);
       });
-      List<String> updatedList = cartItems.map((p) => jsonEncode(p.toMap())).toList();
+      List<String> updatedList = _cartItems.map((p) => jsonEncode(p.toMap())).toList();
       await prefs.setStringList('cart', updatedList);
       print("تم حذف المنتج '$removedItemName' من السلة وتحديث SharedPreferences.");
       ScaffoldMessenger.of(context).showSnackBar(
@@ -80,7 +88,7 @@ class _CartPageState extends State<CartPage> {
   Future<void> _saveCartChanges() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      List<String> updatedList = cartItems.map((p) => jsonEncode(p.toMap())).toList();
+      List<String> updatedList = _cartItems.map((p) => jsonEncode(p.toMap())).toList();
       await prefs.setStringList('cart', updatedList);
       print("تم حفظ تغييرات السلة في SharedPreferences.");
     } catch (e) {
@@ -89,18 +97,18 @@ class _CartPageState extends State<CartPage> {
   }
 
   void _incrementQuantity(int index) {
-    if (index < 0 || index >= cartItems.length) return;
+    if (index < 0 || index >= _cartItems.length) return;
     setState(() {
-      cartItems[index].quantity++;
+      _cartItems[index].quantity++;
     });
     _saveCartChanges();
   }
 
   void _decrementQuantity(int index) {
-    if (index < 0 || index >= cartItems.length) return;
+    if (index < 0 || index >= _cartItems.length) return;
     setState(() {
-      if (cartItems[index].quantity > 1) {
-        cartItems[index].quantity--;
+      if (_cartItems[index].quantity > 1) {
+        _cartItems[index].quantity--;
         _saveCartChanges();
       } else {
         // إذا كانت الكمية 1، فسيؤدي النقصان إلى حذف العنصر
@@ -115,7 +123,7 @@ class _CartPageState extends State<CartPage> {
   // حساب السعر الإجمالي
   double _calculateTotalPrice() {
     double total = 0.0;
-    for (var item in cartItems) {
+    for (var item in _cartItems) {
       total += (item.numericValue * item.quantity);
     }
     return total;
@@ -123,212 +131,433 @@ class _CartPageState extends State<CartPage> {
 
   // الحصول على رمز العملة (نفترض أن جميع المنتجات بنفس العملة)
   String _getCartCurrencySymbol() {
-    if (cartItems.isEmpty) return '';
-    // بما أن العملة موحدة على مستوى الموقع، ابحث عن أول منتج له رمز عملة.
-    // يجب أن تشترك جميع المنتجات الأخرى في هذا الرمز أو يكون رمزها فارغًا.
-    for (var item in cartItems) {
-      if (item.currencySymbol.isNotEmpty) {
-        return item.currencySymbol; // إرجاع أول رمز عملة غير فارغ يتم العثور عليه
+    if (_cartItems.isEmpty) return '';
+    for (var item in _cartItems) {
+      if (item.currencySymbol?.isNotEmpty ?? false) {
+        return item.currencySymbol!;
       }
     }
-    return ''; // إذا لم يكن لأي منتج في السلة رمز عملة
+    return '';
   }
+
+  void _startCheckout() {
+    if (_isCheckoutInProgress) return;
+    
+    setState(() {
+      _isCheckoutInProgress = true;
+      _selectedShippingLocation = null;
+      _selectedPaymentMethod = null;
+    });
+
+    _showShippingLocationDialog();
+  }
+
+  void _showShippingLocationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('اختر موقع الشحن'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.location_on),
+                  title: Text('الرياض'),
+                  subtitle: Text('المنطقة الوسطى'),
+                  onTap: () {
+                    setState(() {
+                      _selectedShippingLocation = 'الرياض';
+                    });
+                    Navigator.of(context).pop();
+                    _showPaymentMethodDialog();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.location_on),
+                  title: Text('جدة'),
+                  subtitle: Text('المنطقة الغربية'),
+                  onTap: () {
+                    setState(() {
+                      _selectedShippingLocation = 'جدة';
+                    });
+                    Navigator.of(context).pop();
+                    _showPaymentMethodDialog();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.location_on),
+                  title: Text('الدمام'),
+                  subtitle: Text('المنطقة الشرقية'),
+                  onTap: () {
+                    setState(() {
+                      _selectedShippingLocation = 'الدمام';
+                    });
+                    Navigator.of(context).pop();
+                    _showPaymentMethodDialog();
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text('إلغاء'),
+              onPressed: () {
+                setState(() {
+                  _isCheckoutInProgress = false;
+                });
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPaymentMethodDialog() {
+    if (_selectedShippingLocation == null) {
+      setState(() {
+        _isCheckoutInProgress = false;
+      });
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('اختر طريقة الدفع'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.credit_card),
+                  title: Text('بطاقة ائتمان'),
+                  subtitle: Text('Visa, Mastercard, etc.'),
+                  onTap: () {
+                    setState(() {
+                      _selectedPaymentMethod = 'بطاقة ائتمان';
+                    });
+                    Navigator.of(context).pop();
+                    _showPaymentDetails();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.account_balance),
+                  title: Text('تحويل بنكي'),
+                  subtitle: Text('تحويل مباشر'),
+                  onTap: () {
+                    setState(() {
+                      _selectedPaymentMethod = 'تحويل بنكي';
+                    });
+                    Navigator.of(context).pop();
+                    _showPaymentDetails();
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text('رجوع'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showShippingLocationDialog();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPaymentDetails() {
+    if (_selectedPaymentMethod == null) {
+      setState(() {
+        _isCheckoutInProgress = false;
+      });
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('تفاصيل الدفع'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('موقع الشحن: $_selectedShippingLocation'),
+                Text('طريقة الدفع: $_selectedPaymentMethod'),
+                SizedBox(height: 16),
+                Text('المبلغ الإجمالي: ${_total.toStringAsFixed(2)} ${_cartItems.isNotEmpty ? _cartItems[0].currencySymbol : ""}'),
+                SizedBox(height: 16),
+                Text('هل تريد المتابعة؟'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text('رجوع'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showPaymentMethodDialog();
+              },
+            ),
+            ElevatedButton(
+              child: Text('تأكيد الدفع'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _processPayment();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _processPayment() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('جاري معالجة الدفع'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('يرجى الانتظار...'),
+            ],
+          ),
+        );
+      },
+    );
+
+    Future.delayed(Duration(seconds: 2), () {
+      Navigator.of(context).pop();
+      _showOrderConfirmation();
+    });
+  }
+
+  void _showOrderConfirmation() {
+    if (_selectedShippingLocation == null || _selectedPaymentMethod == null) {
+      setState(() {
+        _isCheckoutInProgress = false;
+      });
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('تم تأكيد الطلب'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 48),
+              SizedBox(height: 16),
+              Text('تم استلام طلبك بنجاح!'),
+              SizedBox(height: 8),
+              Text('موقع الشحن: $_selectedShippingLocation'),
+              Text('طريقة الدفع: $_selectedPaymentMethod'),
+              SizedBox(height: 8),
+              Text('سيتم إرسال تفاصيل الطلب إلى بريدك الإلكتروني'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: Text('حسناً'),
+              onPressed: () {
+                setState(() {
+                  _isCheckoutInProgress = false;
+                  _selectedShippingLocation = null;
+                  _selectedPaymentMethod = null;
+                });
+                Navigator.of(context).pop();
+                _clearCart();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _clearCart() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('cart', []);
+    setState(() {
+      _cartItems = [];
+      _total = 0.0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    double totalPrice = _calculateTotalPrice();
-    String currencySymbol = _getCartCurrencySymbol();
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('السلة'),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('السلة'), // Style from AppBarTheme
+        title: Text('السلة'),
       ),
-      body: cartItems.isEmpty
+      body: _cartItems.isEmpty
           ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.shopping_bag_outlined, // More relevant icon
-                      size: 100,
-                      color: Colors.grey[350],
-                    ),
-                    SizedBox(height: 24),
-                    Text(
-                      'سلتك فارغة!',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'أضف بعض المنتجات الرائعة لتراها هنا.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.shopping_cart_outlined, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text(
+                    'السلة فارغة',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                ],
               ),
-            ) // عرض رسالة إذا كانت السلة بلا منتجات
-          : ListView.builder(
-              padding: EdgeInsets.all(8.0),
-              itemCount: cartItems.length,
-              itemBuilder: (context, index) {
-                final item = cartItems[index];
-                return Card( // Theme will apply shape and elevation
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8.0),
-                          child: item.image.isNotEmpty && Uri.tryParse(item.image)?.hasAbsolutePath == true
+            )
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _cartItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _cartItems[index];
+                      return Card(
+                        margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: ListTile(
+                          leading: item.image.isNotEmpty
                               ? Image.network(
                                   item.image,
-                                  width: 80,
-                                  height: 80,
+                                  width: 50,
+                                  height: 50,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    width: 80, height: 80, color: Colors.grey[200],
-                                    child: Icon(Icons.broken_image_outlined, size: 40, color: Colors.grey[400]),
-                                  ),
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(Icons.image_not_supported);
+                                  },
                                 )
-                              : Container(
-                                  width: 80, height: 80, color: Colors.grey[200],
-                                  child: Icon(Icons.image_not_supported_outlined, size: 40, color: Colors.grey[400]),
-                                ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
+                              : Icon(Icons.image_not_supported),
+                          title: Text(item.name),
+                          subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                item.name.isNotEmpty ? item.name : "اسم غير متوفر",
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, fontSize: 16),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              SizedBox(height: 4),
-                              if (item.price.isNotEmpty)
-                                Text(
-                                  '${item.currencySymbol.isNotEmpty ? item.currencySymbol : ""} ${item.numericValue.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    color: Theme.of(context).primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                  ),
+                              if (item.selectedOptions != null)
+                                ...item.selectedOptions!.entries.map(
+                                  (e) => Text('${e.key}: ${e.value}'),
                                 ),
-                              SizedBox(height: 6),
-                              if (item.size.isNotEmpty)
-                                Text('المقاس: ${item.size}', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 13)),
-                              if (item.color.isNotEmpty)
-                                Text('اللون: ${item.color}', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 13)),
+                              Text(
+                                '${item.price} ${item.currencySymbol}',
+                                style: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.remove),
+                                onPressed: () {
+                                  setState(() {
+                                    if (item.quantity > 1) {
+                                      item.quantity--;
+                                    } else {
+                                      _cartItems.removeAt(index);
+                                    }
+                                    _saveCartChanges();
+                                  });
+                                },
+                              ),
+                              Text('${item.quantity}'),
+                              IconButton(
+                                icon: Icon(Icons.add),
+                                onPressed: () {
+                                  setState(() {
+                                    item.quantity++;
+                                    _saveCartChanges();
+                                  });
+                                },
+                              ),
                             ],
                           ),
                         ),
-                        SizedBox(width: 8),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: 24),
-                              onPressed: () => _removeFromCart(index),
-                              padding: EdgeInsets.zero,
-                              constraints: BoxConstraints(),
-                            ),
-                            SizedBox(height: 10),
-                            Row(
-                              children: [
-                                InkWell(
-                                  onTap: () => _decrementQuantity(index),
-                                  borderRadius: BorderRadius.circular(15),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8.0), // زيادة مساحة اللمس
-                                    child: Icon(Icons.remove_circle_outline, size: 22, color: Theme.of(context).colorScheme.secondary),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                  child: Text('${item.quantity}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                ),
-                                InkWell(
-                                  onTap: () => _incrementQuantity(index),
-                                  borderRadius: BorderRadius.circular(15),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8.0), // زيادة مساحة اللمس
-                                    child: Icon(Icons.add_circle_outline, size: 22, color: Theme.of(context).colorScheme.secondary),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
-      bottomNavigationBar: cartItems.isNotEmpty
-          ? BottomAppBar(
-              height: 102.0, // زيادة الارتفاع لاستيعاب التجاوز الحالي (78 + 24 = 102)
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0), // يمكن تقليل الحشوة العمودية قليلًا إذا أردت ارتفاعًا أقل للشريط
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'الإجمالي:',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.normal,
-                          ),
-                        ),
-                        Text(
-                          '${currencySymbol.isNotEmpty ? currencySymbol + " " : ""}${totalPrice.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.payment_outlined, color: Colors.white, size: 20),
-                      label: Text('إتمام الشراء', style: TextStyle(color: Colors.white, fontSize: 16)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.secondary, // Amber
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12), // الحشوة الداخلية للزر
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                      ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('خاصية إتمام الشراء غير مفعّلة بعد.')),
-                        );
-                      },
-                    )
-                  ],
                 ),
-              ),
-            )
-          : null,
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'المجموع:',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '${_total.toStringAsFixed(2)} ${_cartItems.isNotEmpty ? _cartItems[0].currencySymbol : ""}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _startCheckout,
+                          child: Text('إتمام الشراء'),
+                          style: ElevatedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
-  }
+}
   
