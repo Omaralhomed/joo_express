@@ -21,6 +21,8 @@ class _SheinScreenState extends State<SheinScreen> {
   bool _canGoForward = false;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   int _cartItemCount = 0;
+  String? _selectedShippingLocation;
+  String? _selectedPaymentMethod;
 
   @override
   void initState() {
@@ -43,86 +45,67 @@ class _SheinScreenState extends State<SheinScreen> {
     return Scaffold(
       key: _scaffoldMessengerKey,
       appBar: AppBar(
-        title: Text('متصفح SHEIN'),
+        title: const Text('شي إن'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        titleTextStyle: TextStyle(
+          color: Colors.grey[800],
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
         actions: [
-          Builder(
-            builder: (BuildContext context) {
-              return IconButton(
-                icon: Icon(Icons.link),
-                tooltip: 'بحث بالرابط',
-                onPressed: () {
-                  _showSearchByLinkDialog(context);
-                },
-              );
-            }
-          ),
-          Builder(
-            builder: (BuildContext context) {
-              return IconButton(
-                icon: Icon(Icons.share),
-                tooltip: 'مشاركة الصفحة',
-                onPressed: () {
-                  _shareCurrentPage();
-                },
-              );
-            }
-          ),
-          Builder(
-            builder: (BuildContext iconButtonContext) {
-              return badges.Badge(
-                position: badges.BadgePosition.topEnd(top: 0, end: 3),
-                badgeContent: Text(
-                  _cartItemCount.toString(),
-                  style: TextStyle(color: Colors.white, fontSize: 10),
-                ),
-                showBadge: _cartItemCount > 0,
-                child: IconButton(
-                  icon: Icon(Icons.shopping_cart_outlined),
-                  onPressed: () async {
-                    await Navigator.push(
-                      iconButtonContext,
-                      MaterialPageRoute(builder: (context) => CartPage()),
-                    );
-                    if (mounted) {
-                      _loadCartCount();
-                    }
-                  },
-                ),
-              );
+          IconButton(
+            icon: badges.Badge(
+              showBadge: _cartItemCount > 0,
+              badgeContent: Text(
+                _cartItemCount.toString(),
+                style: TextStyle(color: Colors.white),
+              ),
+              child: Icon(Icons.shopping_cart_outlined),
+            ),
+            onPressed: () {
+              Navigator.pushNamed(context, '/cart');
             },
           ),
         ],
       ),
-        body: InAppWebView(
-    initialUrlRequest: URLRequest(url: WebUri('https://m.shein.com/')),
-    initialSettings: InAppWebViewSettings(
-      javaScriptEnabled: true,
-      domStorageEnabled: true,
-      useShouldInterceptRequest: true,
-      useShouldOverrideUrlLoading: true,
-      mediaPlaybackRequiresUserGesture: false,
-      allowsInlineMediaPlayback: true,
-    ),
-    onWebViewCreated: (controller) {
-      webViewController = controller;
-      controller.addJavaScriptHandler(
-        handlerName: 'addToCartHandler',
-        callback: _handleAddToCart,
-      );
-    },
-    onLoadStop: (controller, url) async {
-      // تحديث حالة أزرار الرجوع والتقدم
-      if (mounted) {
-        final cgb = await controller.canGoBack();
-        final cgf = await controller.canGoForward();
-        setState(() {
-          _canGoBack = cgb;
-          _canGoForward = cgf;
-        });
-      }
-      
-      // حقن كود JavaScript مع تأخير بسيط للتأكد من تحميل الصفحة بالكامل
-      await Future.delayed(Duration(milliseconds: 500));
+      body: InAppWebView(
+        initialUrlRequest: URLRequest(url: WebUri('https://m.shein.com/')),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: true,
+          domStorageEnabled: true,
+          useShouldInterceptRequest: true,
+          useShouldOverrideUrlLoading: true,
+          mediaPlaybackRequiresUserGesture: false,
+          allowsInlineMediaPlayback: true,
+        ),
+        onWebViewCreated: (controller) {
+          webViewController = controller;
+          controller.addJavaScriptHandler(
+            handlerName: 'addToCartHandler',
+            callback: _handleAddToCart,
+          );
+          controller.addJavaScriptHandler(
+            handlerName: 'navigateToMainCart',
+            callback: (args) {
+              Navigator.pushNamed(context, '/cart');
+              return null;
+            },
+          );
+        },
+        onLoadStop: (controller, url) async {
+          // تحديث حالة أزرار الرجوع والتقدم
+          if (mounted) {
+            final cgb = await controller.canGoBack();
+            final cgf = await controller.canGoForward();
+            setState(() {
+              _canGoBack = cgb;
+              _canGoForward = cgf;
+            });
+          }
+          
+          // حقن كود JavaScript مع تأخير بسيط للتأكد من تحميل الصفحة بالكامل
+          await Future.delayed(Duration(milliseconds: 500));
 
           // حقن كود JavaScript
           String jsCode = r"""
@@ -529,7 +512,7 @@ class _SheinScreenState extends State<SheinScreen> {
                         '#goods-color-main', // حاوية اللون الرئيسية من HTML المقدم
                         '.product-intro__color-choose', // حاويات ألوان شائعة أخرى
                         '.product-intro__color-block', '.product-intro-sku__swatch-list--color', 
-                        '.product-sku-selector--color', '.goods-skuinfo__list[data-sku-name*="color" i]', 
+                        '.product-sku-selector--size', '.goods-skuinfo__list[data-sku-name*="color" i]', 
                         'div[class*="color-selector"]', 'div[data-attr-name*="Color"]', '.product-intro__color-show', 
                       ],
                       [
@@ -559,56 +542,69 @@ class _SheinScreenState extends State<SheinScreen> {
                           if (!value) value = 'لون غير مسمى';
 
                           display = imgSrc ? `<img src="${imgSrc}" alt="${value}" title="${value}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto; border: 1px solid #eee;">` : value;
-                          if (imgSrc && value !== 'لون غير مسمى' && value.length < 20) display += `<span style="font-size:10px; display:block; text-align:center; margin-top:3px; color:#555; max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${value}</span>`;
+                          if (imgSrc && value !== 'لون غير مسمى' && value.length < 20) display += `<span style="font-size:10px; display:block; text-align:center; margin-top:3px; color:#555; max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-size: nowrap;">${value}</span>`;
                           return { value: value, display: display || value };
                       }, true, true ); // isMandatory = true, isSpecificPriorityGroup = true
 
                   // --- Define Option Groups ---
-                  extractAndRenderOptionGroup('المقاس', 'size',
+                  // استخراج عنوان مجموعة المقاس/الحجم من الصفحة
+                  let sizeGroupTitle = 'المقاس'; // عنوان افتراضي
+                  const sizeTitleSelectors = [
+                    '.goods-size__title', // من HTML المقدم
+                    '.product-intro__size-title', '.product-intro-sku__title-text',
+                    '.goods-skuinfo__title', '.product-sku-selector__title',
+                    'div[class*="size-selector"] .sku-title', 'div[data-attr-name*="Size"] .sku-title',
+                    '.product-intro__size .sku-title', '.product-intro__size-choose .sku-title',
+                    '.product-intro-sku__swatch-list--size .sku-title',
+                    '.goods-skuinfo__list[data-sku-name*="size" i] .sku-title',
+                    'div[class*="size-selector"] .attr-name', 'div[data-attr-name*="Size"] .attr-name',
+                    '.product-intro__size .attr-name', '.product-intro__size-choose .attr-name',
+                    '.product-intro-sku__swatch-list--size .attr-name',
+                    '.goods-skuinfo__list[data-sku-name*="size" i] .attr-name'
+                  ];
+                  
+                  for (const selector of sizeTitleSelectors) {
+                    const titleElement = document.querySelector(selector);
+                    if (titleElement && titleElement.innerText && titleElement.innerText.trim()) {
+                      const extractedTitle = titleElement.innerText.trim().replace(':', '');
+                      if (extractedTitle && extractedTitle.length < 30) { // تحقق أساسي من طول العنوان
+                        sizeGroupTitle = extractedTitle;
+                        console.log('SHEIN Custom Script: Found size group title:', sizeGroupTitle);
+                        break;
+                      }
+                    }
+                  }
+
+                  extractAndRenderOptionGroup(sizeGroupTitle, 'size',
                       [
                         '.goods-size ul.goods-size__sizes', // New from provided HTML (primary target)
                         '.goods-size', // Main container for new HTML structure, good fallback for the whole size section
                         '.product-intro__size-choose', '.product-intro__size-select', '.product-intro-sku__swatch-list--size', 
                         '.product-sku-selector--size', '.goods-skuinfo__list[data-sku-name*="size" i]', 
                         'div[class*="size-selector"]', 'div[data-attr-name*="Size"]', '.product-intro__size', 
-                        // '.goods-size__wrapper', // This is inside .goods-size, so .goods-size is broader
-                        // '.SIZE_ITEM_HOOK' // This is the ul itself, covered by '.goods-size ul.goods-size__sizes'
-                        // '.product-intro__bsSize', // Often too generic or part of a larger component
-                        // '[da-eid="2fnem0ivt24"]', // Too specific, likely to break
-                        // '.purchase-control' // Too broad, can cause issues if it contains color too
                       ],
                       [
                         'li.goods-size__sizes-item', // New item selector from provided HTML - should be primary
                         '.product-intro__size-radio', '.product-intro__size-item', '.product-intro-sku__item', 
                         '.product-sku-selector__item', '.goods-skuinfo__item', 'div[class*="size-item"]', // Keep existing for broader compatibility
                         'button[class*="size-item"]', 'li', '.size-item.product-intro__size', 
-                        // '.size-radio', // Often a wrapper, covered by more specific item selectors
-                        // '.product-intro__size-radio.fsp-element' // Too specific
-                      ], // دالة استخلاص قيمة المقاس (نص)
+                      ],
                       function(item) { 
                           let valueText = '';
-                          // let displayHtml = ''; // displayHtml سيكون نفس valueText للمقاس
-                          let targetElement = item; // 'item' is the element matched by itemSelectors
+                          let targetElement = item;
 
-                          // Special handling for older structures if 'item' is a known wrapper
                           if (item.matches('span.size-radio') && item.querySelector('div.product-intro__size-radio')) {
                               targetElement = item.querySelector('div.product-intro__size-radio');
                           }
-                          // For the new HTML, 'item' is 'li.goods-size__sizes-item'.
 
-                          // Extraction Priority:
-                          // 1. 'aria-item' (كما في HTML المقدم لـ li.goods-size__sizes-item)
                           if (targetElement.hasAttribute('aria-item')) {
                               valueText = (targetElement.getAttribute('aria-item') || '').trim();
                           }
 
-                          // 2. 'data-attr_value' (كما في HTML المقدم لـ li.goods-size__sizes-item)
                           if (!valueText && targetElement.hasAttribute('data-attr_value')) {
                               valueText = (targetElement.getAttribute('data-attr_value') || '').trim();
                           }
 
-                          // 3. Specific inner text elements (add new one, keep others)
-                          // p.goods-size__sizes-item-text is the primary display text for the new structure
                           const innerTextEl = targetElement.querySelector(
                               'p.goods-size__sizes-item-text, ' + // New from provided HTML
                               'p.product-intro__size-radio-inner, .product-intro__size-radio-text, ' +
@@ -616,41 +612,37 @@ class _SheinScreenState extends State<SheinScreen> {
                               '.goods-skuinfo__item-text, .size-item__title'
                           );
                           if (innerTextEl) {
-                              valueText = (innerTextEl.innerText || innerTextEl.textContent || '').trim() || valueText; // Use existing valueText as fallback
+                              valueText = (innerTextEl.innerText || innerTextEl.textContent || '').trim() || valueText;
                           }
-                          // 4. 'aria-label' attribute (common attribute, lower priority if text found)
+
                           if (!valueText && targetElement.hasAttribute('aria-label')) {
                               valueText = (targetElement.getAttribute('aria-label') || '').trim();
                           }
 
-                          // 5. 'data-attr_value_name' attribute (another SHEIN specific attribute)
                           if (!valueText && targetElement.hasAttribute('data-attr_value_name')) {
                               valueText = (targetElement.getAttribute('data-attr_value_name') || '').trim();
                           }
                           
-                          // 6. Fallback to targetElement's own innerText (or original item's if targetElement was changed)
                           if (!valueText) {
                               let textToUse = (targetElement.innerText || targetElement.textContent || '').trim();
-                              if (!textToUse && item !== targetElement) { // If targetElement's text is empty and it was different from original item
+                              if (!textToUse && item !== targetElement) {
                                   textToUse = (item.innerText || item.textContent || '').trim();
                               }
-                              // Only use this fallback if it's reasonably short and doesn't contain newlines
                               if (textToUse.length > 0 && textToUse.length < 70 && !textToUse.includes('\n')) {
                                   valueText = textToUse;
                               }
                           }
                           
-                          // Final Default: If no valid text found after all attempts
                           if (!valueText) {
                               valueText = 'غير محدد';
                           }
                           
-                          return { value: valueText, display: valueText }; // display هو نفس value للمقاس
+                          return { value: valueText, display: valueText };
                       },
                       true, // isMandatory
                       true  // isSpecificPriorityGroup
                   );
-                  
+
                   // Attempt to find other generic SKU groups
                   document.querySelectorAll('.product-intro-sku__swatch-list, .goods-skuinfo__list, div[class*="sku-group"], div[class*="option-group"]').forEach((container, idx) => {
                       // This loop finds potential *main* containers for generic options.
@@ -875,7 +867,7 @@ class _SheinScreenState extends State<SheinScreen> {
                           }
                           basePrice = priceData.price;
                           currency = priceData.currency;
-
+                          
                           var imgSelectors = [
                             '.goods-detail-top__CarouselsBeltBox .swiper-slide-active img', // Attempt to get main image from carousel (if swiper is used)
                             '#goods-color-main li.goods-color__img-item.color-active img.crop-image-container__img', // Image of selected color (new HTML)
@@ -885,27 +877,27 @@ class _SheinScreenState extends State<SheinScreen> {
                             'div.product-intro__main-img-ctn img.animation-image__img', // Specific animated image
                             '.she-product-image-viewer__main-img', // Viewer image
                             '.swiper-slide-active .goods-img__image' // Active image in a swiper
-                            // Removed very generic ones like img[alt*="product"], img[class*="product-image"]
                           ];
                           for (let s of imgSelectors) { try { let el = document.querySelector(s); if (el && el.src) { image = el.src; break; } } catch(e){} }
                           if (!image && document.querySelector('img')) { try { image = document.querySelector('img').src; } catch(e){} }
 
-                          const selectedSizeOpt = collectedOptionsConfig.find(opt => opt.id === 'size');
-                          const selectedColorOpt = collectedOptionsConfig.find(opt => opt.id === 'color');
-                          
-                          let finalSize = selectedSizeOpt ? selectedSizeOpt.selectedValue : '';
-                          let finalColor = selectedColorOpt ? selectedColorOpt.selectedValue : '';
-                          
-                          // You could also gather other selected options if needed:
-                          // let otherSelectedOptions = {};
-                          // collectedOptionsConfig.filter(opt => opt.id !== 'size' && opt.id !== 'color' && opt.selectedValue).forEach(opt => {
-                          //    otherSelectedOptions[opt.title] = opt.selectedValue;
-                          // });
-                          // Then pass otherSelectedOptions or a string representation of them.
+                          // تجميع كل الخيارات المحددة
+                          let allSelectedOptions = {};
+                          collectedOptionsConfig.forEach(optGroup => {
+                              if (optGroup.selectedValue) {
+                                  // استخدام optGroup.title كـ مفتاح، وهو بالفعل بالعربية (مثل "اللون", "المقاس")
+                                  allSelectedOptions[optGroup.title] = optGroup.selectedValue;
+                              }
+                          });
 
-                          console.log('SHEIN Custom Script: Adding to cart from sheet -> Name:', name, 'Price:', basePrice, 'Currency:', currency, 'Image:', image, 'Size:', finalSize, 'Color:', finalColor);
+                          console.log('SHEIN Custom Script: Adding to cart from sheet -> Name:', name, 'Price:', basePrice, 'Currency:', currency, 'Image:', image, 'Selected Options:', allSelectedOptions);
                           if (window.flutter_inappwebview && typeof window.flutter_inappwebview.callHandler === 'function') {
-                              window.flutter_inappwebview.callHandler('addToCartHandler', name, basePrice, image, finalSize, finalColor, currency)
+                              window.flutter_inappwebview.callHandler('addToCartHandler',
+                                  name,
+                                  basePrice,
+                                  image,
+                                  JSON.stringify(allSelectedOptions), // إرسال الخيارات كـ JSON string
+                                  currency)
                                   .then(function(result) { console.log('SHEIN Custom Script: addToCartHandler call successful from sheet, result:', result); })
                                   .catch(function(error) { console.error('SHEIN Custom Script: Error calling addToCartHandler from sheet:', error); });
                           } else {
@@ -924,6 +916,51 @@ class _SheinScreenState extends State<SheinScreen> {
                   cancelBtn.onmouseout = function() { this.style.backgroundColor = '#f0f0f0'; };
                   cancelBtn.addEventListener('click', function() {
                       sheet.remove();
+                  });
+
+                  // Add checkout button handler
+                  function handleCheckoutButton() {
+                    const checkoutSelectors = [
+                      'button[class*="checkout"]',
+                      'button[class*="Checkout"]',
+                      'a[class*="checkout"]',
+                      'a[class*="Checkout"]',
+                      'button[data-qa="checkout"]',
+                      'a[data-qa="checkout"]',
+                      'button[data-test-id="checkout"]',
+                      'a[data-test-id="checkout"]',
+                      'button[class*="place-order"]',
+                      'button[class*="PlaceOrder"]',
+                      'a[class*="place-order"]',
+                      'a[class*="PlaceOrder"]'
+                    ];
+
+                    for (const selector of checkoutSelectors) {
+                      const elements = document.querySelectorAll(selector);
+                      elements.forEach(element => {
+                        element.addEventListener('click', function(e) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (window.flutter_inappwebview && typeof window.flutter_inappwebview.callHandler === 'function') {
+                            window.flutter_inappwebview.callHandler('navigateToMainCart');
+                          }
+                        });
+                      });
+                    }
+                  }
+
+                  // Call handleCheckoutButton initially
+                  handleCheckoutButton();
+
+                  // Add observer for checkout buttons
+                  const checkoutObserver = new MutationObserver((mutations) => {
+                    handleCheckoutButton();
+                  });
+
+                  // Start observing the document with the configured parameters
+                  checkoutObserver.observe(document.body, {
+                    childList: true,
+                    subtree: true
                   });
               }
 
@@ -1756,28 +1793,121 @@ class _SheinScreenState extends State<SheinScreen> {
   }
 
   void _handleAddToCart(List<dynamic> args) {
-    if (args.length >= 5) {
+    // الوسائط المتوقعة: name, basePrice, image, optionsJsonString, currency
+    // يرسل JavaScript دائمًا 5 وسائط
+    if (args.length >= 5) { 
       try {
         String name = args[0]?.toString() ?? 'اسم غير معروف';
         String? rawPrice = args[1]?.toString();
         String price = (rawPrice?.isEmpty ?? true) ? '0' : rawPrice!;
         String image = args[2]?.toString() ?? '';
-        String size = args[3]?.toString() ?? 'مقاس غير محدد';
-        String color = args[4]?.toString() ?? '';
-        String currency = args.length > 5 ? args[5]?.toString() ?? '' : '';
+        String optionsJsonString = args[3]?.toString() ?? '{}';
+        String currency = args[4]?.toString() ?? '';
+
+        Map<String, String> selectedOptions = {};
+        try {
+          if (optionsJsonString.isNotEmpty && optionsJsonString != '{}') {
+            Map<String, dynamic> decodedOptions = jsonDecode(optionsJsonString);
+            decodedOptions.forEach((key, value) {
+              selectedOptions[key.toString()] = value.toString();
+            });
+          }
+        } catch (e) {
+          print('خطأ في فك ترميز JSON للخيارات: $optionsJsonString, الخطأ: $e');
+        }
 
         final product = Product(
           name: name,
           price: price,
           image: image,
-          size: size,
-          color: color,
+          selectedOptions: selectedOptions.isNotEmpty ? selectedOptions : null,
           currencySymbol: currency,
+          site: 'SHEIN', // إضافة الموقع
         );
+
+        // إضافة المنتج إلى سلة التطبيق
         _addProductToCart(product);
+
+        // إضافة المنتج إلى سلة شي إن الداخلية
+        _addToSheinCart(product);
+
       } catch (e) {
         print('Error handling add to cart: $e');
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+           SnackBar(content: Text('حدث خطأ أثناء إضافة المنتج للسلة: $e')),
+        );
       }
+    } else {
+      print('خطأ: استدعاء addToCartHandler بعدد غير كاف من الوسائط. المتوقع 5، المستلم ${args.length}');
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('خطأ في البيانات المستلمة من الصفحة (عدد الحجج غير كاف).')),
+      );
+    }
+  }
+
+  // دالة جديدة لإضافة المنتج إلى سلة شي إن الداخلية
+  Future<void> _addToSheinCart(Product product) async {
+    try {
+      // حقن JavaScript لإضافة المنتج إلى سلة شي إن
+      String jsCode = """
+        (function() {
+          // محاولة العثور على زر إضافة إلى السلة الأصلي
+          const addToCartSelectors = [
+            '#ProductDetailAddBtnForFloorPrice',
+            '.product-intro__add-cart-btn',
+            '.SProductDetailBottomToolLayout__add-cart-btn',
+            '.goods-detial__add-cart-btn',
+            'button[ga_label="AddToBag"]',
+            '.add-to-cart-button',
+            '.product-card__add-bag',
+            'button[class*="add-to-cart"]',
+            'button[class*="add-to-bag"]',
+            '.goods-add-cart-btn',
+            '.add-to-bag',
+            '.add-cart',
+            'button[data-qa="add-to-bag"]',
+            '.product-intro__add-btn',
+            '.detail-bottom-fixedtool__add-cart'
+          ];
+
+          let addToCartButton = null;
+          for (const selector of addToCartSelectors) {
+            const button = document.querySelector(selector);
+            if (button) {
+              addToCartButton = button;
+              break;
+            }
+          }
+
+          if (addToCartButton) {
+            // محاكاة النقر على الزر
+            addToCartButton.click();
+            console.log('SHEIN Custom Script: Clicked original add to cart button');
+            return true;
+          } else {
+            console.log('SHEIN Custom Script: Could not find original add to cart button');
+            return false;
+          }
+        })();
+      """;
+
+      await webViewController.evaluateJavascript(source: jsCode);
+      
+      // عرض رسالة نجاح
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('تمت إضافة المنتج إلى سلة شي إن بنجاح!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('Error adding to SHEIN cart: $e');
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ أثناء إضافة المنتج إلى سلة شي إن'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -1797,12 +1927,31 @@ class _SheinScreenState extends State<SheinScreen> {
         .cast<Product>()
         .toList();
 
-    int existingProductIndex = currentCartItems.indexWhere((p) =>
-        p.name == product.name &&
-        p.price == product.price &&
-        p.size == product.size &&
-        p.color == product.color &&
-        p.currencySymbol == product.currencySymbol);
+    int existingProductIndex = currentCartItems.indexWhere((p) {
+      bool basicMatch = p.name == product.name &&
+                        p.price == product.price &&
+                        p.currencySymbol == product.currencySymbol &&
+                        p.site == product.site; // إضافة مقارنة الموقع
+      if (!basicMatch) return false;
+
+      Map<String, String>? pOpts = p.selectedOptions;
+      Map<String, String>? productOpts = product.selectedOptions;
+
+      bool pOptsEmptyOrNull = pOpts == null || pOpts.isEmpty;
+      bool productOptsEmptyOrNull = productOpts == null || productOpts.isEmpty;
+
+      if (pOptsEmptyOrNull && productOptsEmptyOrNull) return true;
+      if (pOptsEmptyOrNull || productOptsEmptyOrNull) return false;
+
+      if (pOpts!.length != productOpts!.length) return false;
+
+      for (final key in pOpts.keys) {
+        if (!productOpts!.containsKey(key) || pOpts[key] != productOpts[key]) {
+          return false;
+        }
+      }
+      return true;
+    });
 
     if (existingProductIndex != -1) {
       currentCartItems[existingProductIndex].quantity++;
@@ -1810,11 +1959,21 @@ class _SheinScreenState extends State<SheinScreen> {
       currentCartItems.add(product);
     }
 
-    List<String> updatedCartJsonList = currentCartItems.map((p) => jsonEncode(p.toMap())).toList();
+    List<String> updatedCartJsonList = currentCartItems
+        .map((p) => jsonEncode(p.toMap()))
+        .toList();
     await prefs.setStringList('cart', updatedCartJsonList);
-    setState(() {
-      _cartItemCount = currentCartItems.length;
-    });
+    if (mounted) {
+      setState(() {
+        _cartItemCount = currentCartItems.length;
+      });
+    }
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text('${product.name} ${existingProductIndex != -1 ? "تم تحديث الكمية" : "أضيف إلى السلة"} بنجاح!'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   void _showSearchByLinkDialog(BuildContext context) {
@@ -1879,5 +2038,22 @@ class _SheinScreenState extends State<SheinScreen> {
         );
       }
     }
+  }
+
+  Future<bool> _validateOrder() async {
+    // ... التحقق من المنتجات ...
+    if (_selectedShippingLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('يرجى اختيار موقع الشحن')),
+      );
+      return false;
+    }
+    if (_selectedPaymentMethod == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('يرجى اختيار طريقة الدفع')),
+      );
+      return false;
+    }
+    return true;
   }
 }
